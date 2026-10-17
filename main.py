@@ -1,6 +1,7 @@
 import argparse
+import joblib
 
-from src import init_dataset, preprocessing, transformation, split_data, naive_bayes
+from src import init_dataset, preprocessing, transformation, split_data, naive_bayes, decision_tree, compare, config
 from src.svm_model import run_svm
 from src.utils import quiet
 
@@ -10,6 +11,8 @@ STAGES = [
     "preprocessing",
     "transformation",
     "split",
+    "models",
+    "compare",
 ]
 
 
@@ -56,11 +59,31 @@ def main(stage: str = "all") -> None:
     # =========================================================
     # 3. TRANSFORMATION
     # =========================================================
-    X, y, _scaler = call_stage(
+    X, y, scaler = call_stage(
         "transformation",
         transformation.run,
         df_clean,
     )
+
+    # Simpan artefak preprocessing untuk UI/UX aplikasi (Bagian Nadine)
+    bounds = preprocessing.compute_bounds(df_raw)
+    preprocess_artifact = {
+        "scaler": scaler,
+        "bounds": bounds,
+        "type_mapping": config.TYPE_MAPPING,
+        "feature_order": [
+            "Type",
+            "Air temperature [K]",
+            "Process temperature [K]",
+            "Rotational speed [rpm]",
+            "Torque [Nm]",
+            "Tool wear [min]",
+        ],
+    }
+    config.MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    joblib.dump(preprocess_artifact, config.PREPROCESS_PATH)
+    if show("transformation"):
+        print(f"[Artefak] Preprocessing disimpan di: {config.PREPROCESS_PATH}")
 
     if last == 3:
         return
@@ -75,10 +98,13 @@ def main(stage: str = "all") -> None:
         y,
     )
 
+    if last == 4:
+        return
+
     # =========================================================
-    # EKSEKUSI MODEL & EKSPERIMEN
+    # 5. EKSEKUSI MODEL & EKSPERIMEN
     # =========================================================
-    if stage == "all":
+    if stage == "all" or stage == "models":
         print(
             "\nBaseline selesai: "
             "X_train, X_test, y_train, y_test siap dipakai.\n"
@@ -94,6 +120,20 @@ def main(stage: str = "all") -> None:
         # 2. Jalankan eksperimen SVM 
         print("\n=== Menjalankan Eksperimen SVM ===")
         run_svm()
+
+        # 3. Jalankan eksperimen Decision Tree (UTS)
+        print("\n=== Menjalankan Eksperimen Decision Tree ===")
+        decision_tree.run()
+
+    if last == 5:
+        return
+
+    # =========================================================
+    # 6. PERBANDINGAN MODEL & REKOMENDASI (Bagian Nadine)
+    # =========================================================
+    if stage == "all" or stage == "compare":
+        print("\n=== Menjalankan Modul Perbandingan (Bagian Nadine) ===")
+        compare.run()
 
 
 if __name__ == "__main__":
